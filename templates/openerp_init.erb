@@ -1,0 +1,128 @@
+#!/bin/sh
+
+#
+# OpenERP init script v0.1 for centos by Open-Future
+# Bert Deferme - www.open-future.be - bert@open-future.be
+#
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as
+# published by the Free Software Foundation.
+#
+# For a copy of the GNU General Public License, see <http://www.gnu.org/licenses/>.
+
+# chkconfig: 345 60 61
+# description: starts the openerp-server service
+
+NAME=openerp-server
+USER=openerp
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+PIDDIR=/var/run/openerp
+PIDFILE=$PIDDIR/$NAME.pid
+CONFFILE=/etc/openerp-server.cfg
+DAEMON=<%= openerpserver_path %>
+#DAEMON=/usr/local/bin/openerp-server
+DAEMONOPTS="--pidfile=${PIDFILE} --config=${CONFFILE}"
+
+checkpid() {
+  [ -f $PIDFILE ] || return 1
+  pid=`cat $PIDFILE`
+  [ -d /proc/$pid ] && return 0
+  return 1
+}
+
+do_start() {
+
+  if [ -f $PIDFILE ]; then
+    echo "pidfile already exists: $PIDFILE"
+    exit 1
+  fi
+
+  echo -n "Starting $NAME: "
+
+  if [ ! -d $PIDDIR ]
+  then
+      mkdir $PIDDIR
+      chown $USER $PIDDIR
+  fi
+
+  su - $USER -c "nohup $DAEMON $DAEMONOPTS >/dev/null 2>&1 &"
+
+  sleep 3
+
+  checkpid
+
+  if [ $? -eq 1 ]; then
+    rm -f $PIDFILE
+    echo "failed."
+    exit 1
+  fi
+
+  echo "done."
+}
+
+do_stop() {
+
+  checkpid
+
+  if [ $? -eq 1 ]; then
+    echo -n "$NAME not running... (no pidfile found)"
+    exit 0
+  fi
+
+  echo -n "Stopping $NAME: "
+
+  pid=`cat $PIDFILE`
+  kill -15 $pid
+
+  sleep 2
+
+  if [ $? -eq 1 ]; then
+    echo "Failed. (pidfile found but process didn't exist)"
+    exit 1
+  fi
+
+  echo "done."
+
+}
+
+do_status() {
+
+  echo -n "Checking $NAME: "
+
+  checkpid
+
+  if [ $? -eq 1 ]; then
+    echo "stopped."
+  else
+    echo "running."
+  fi
+
+}
+
+do_restart() {
+
+  do_stop
+
+  if [ $? -eq 1 ]; then
+    exit 1
+  fi
+
+  do_start
+
+}
+
+case "$1" in
+    start) do_start ;;
+    stop) do_stop ;;
+    restart|force-reload) do_restart ;;
+    status) do_status ;;
+    *)
+        N=/etc/init.d/$NAME
+        echo "Usage: $N {start|stop|restart|status}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

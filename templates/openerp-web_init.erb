@@ -1,0 +1,130 @@
+#!/bin/sh
+#
+# OpenERP init script v0.2 for Centos and Ubuntu by Open-Future
+# Bert Deferme - www.open-future.be - bert@open-future.be
+# Philip Uren - www.mbase.com.au - philu A-t ieee.org
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as
+# published by the Free Software Foundation.
+#
+# For a copy of the GNU General Public License, see <http://www.gnu.org/licenses/>.
+# chkconfig: 345 61 60
+# description: runs the openerp-web service
+###################################################################################
+
+NAME=openerp-web
+USER=openerp
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+DAEMON=<%= openerpweb_path %>
+PIDDIR=/var/run/openerp
+PIDFILE=$PIDDIR/$NAME.pid
+DAEMONOPTS="-c /etc/openerp-web.cfg"
+
+checkpid() {
+  [ -s $PIDFILE ] || return 1
+  pid=`cat $PIDFILE`
+  [ -z "$pid" ] && return 1
+  [ -d /proc/$pid ] && return 0
+  return 1
+}
+
+do_start() {
+
+  if [ -f $PIDFILE ]; then
+    echo "pidfile already exists: $PIDFILE"
+    exit 1
+  fi
+
+  echo -n "Starting $NAME: "
+
+  if [ ! -d $PIDDIR ]
+  then
+      mkdir $PIDDIR
+      chown $USER $PIDDIR
+  fi
+
+  su - $USER -c "nohup $DAEMON $DAEMONOPTS >/dev/null 2>&1 &"
+
+  sleep 2
+
+  # This next line, in particular the use of the cut command, doesn't work on Ubuntu 10.10
+  # because it treats a single space as a delimiter, not a series of spaces.
+  # pid=`ps -ef|grep openerp-web|grep -v grep|cut -d " " -f3`
+  ps -ef | grep openerp-web | grep python | grep -v grep | awk '{print $2}' > $PIDFILE  
+
+  checkpid
+  if [ $? -eq 1 ]; then
+    rm -f $PIDFILE
+    echo "failed."
+    exit 1
+  fi
+
+  echo "done."
+}
+
+do_stop() {
+
+  checkpid
+  if [ $? -eq 1 ]; then
+    echo -n "$NAME not running... (no pidfile found)"
+    exit 0
+  fi
+
+  echo -n "Stopping $NAME: "
+
+  pid=`cat $PIDFILE`
+  kill -15 $pid
+
+  sleep 2
+
+  if [ $? -eq 1 ]; then
+    echo "Failed. (pidfile found but process didn't exist)"
+    exit 1
+  fi
+
+  rm $PIDFILE
+
+  echo "done."
+
+}
+
+do_status() {
+
+  echo -n "Checking $NAME: "
+
+  checkpid
+  if [ $? -eq 1 ]; then
+    echo "stopped."
+  else
+    echo "running."
+  fi
+
+}
+
+do_restart() {
+
+  do_stop
+
+  if [ $? -eq 1 ]; then
+    exit 1
+  fi
+
+  do_start
+
+}
+
+case "$1" in
+    start) do_start ;;
+    stop) do_stop ;;
+    restart|force-reload) do_restart ;;
+    status) do_status ;;
+    *)
+        N=/etc/init.d/$NAME
+        echo "Usage: $N {start|stop|restart|status}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
